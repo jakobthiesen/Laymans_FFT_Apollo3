@@ -2,14 +2,19 @@
 A repository to share this "built in a shed DSP software" for the Apollo3 (Artemis Redboard). Currently, a library to use the ADC with DMA and an FFT library is included, with more to come.
 (Bear with the errors in the grammar.)
 
-At this time, three things can be found in this Laymans FFT folder: a library to use the ADC together with the DMA on the Apollo3 (Redboard Artemis as of right now), and a library to perform a standard radix-2 FFT on a set of samples using the DSP instructions for the M4 core. The FFT performs quite well and is rather fast. To save memory and leverage flexibility, the FFT uses a 512-entry LUT for twiddle factors and a first-order Taylor approximation for values in between. The FFT uses Q15, i.e., 16-bit fixed-point math.
+At this time, four things can be found in this Laymans FFT folder: a library to use the ADC together with the DMA on the Apollo3 (Redboard Artemis as of right now), a library to perform a standard radix-2 FFT on a set of samples using the DSP instructions for the M4 core, a library to boost the core to 96 MHz and one to transmit the FFT data to a PC using an effecient custom serial protocol. The FFT performs quite well and is rather fast. To save memory and leverage flexibility, the FFT uses a 512-entry LUT for twiddle factors and a first-order Taylor approximation for values in between. The FFT uses Q15, i.e., 16-bit fixed-point math.
+
+You can expect the following performance of you only sample and run FFT:
+100 2048-point FFTs → 2.8087 s → 35.60 FFTs/s
+100 512-point FFTs  → 0.6039 s → 165.60 FFTs/s
+100 128-point FFTs  → 0.1363 s → 733.55 FFTs/s
 
 To get up and running, make sure to use the Arduino IDE with the SparkFun drivers for the Apollo3.
 To add the libraries, open %appdata%, navigate to Local -> Arduino15 -> packages -> SparkFun -> hardware -> apollo3 -> 2.1.1 (or whatever version you are using) -> libraries.
 
-In this folder (libraries), add the Apoll3_ADC_LIB and Laymans_FFT folders. This will allow you to simply import the libraries.
+In this folder (libraries), add the Apoll3_ADC_LIB, Laymans_FFT, Apollo3_TurboSPOT and  PyPlot_Serial folders. This will allow you to simply import the libraries.
 
-Both libraries are built as close to a class as one can in pure C, using a handle as the UI.
+All libraries are built as close to a class as one can in pure C, using a handle as the UI.
 
 For the ADC library, you must configure the following:
 - An array to store the samples in; the DMA will unload the samples to this array.
