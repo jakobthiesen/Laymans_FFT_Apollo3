@@ -13,7 +13,7 @@ adc_handle_t* x = adc_get_handle();
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(500000);
-  adc_config(x, 2660000, 256, ADC_A1, OSR_8, ADC_14BIT);
+  adc_config(x, 2660000, 256, ADC_A1, OSR_1, ADC_14BIT);
   adc_setup(x, SMPL_BUF);
   delay(500);
 }
