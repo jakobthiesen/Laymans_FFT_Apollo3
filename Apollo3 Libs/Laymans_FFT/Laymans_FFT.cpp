@@ -82,7 +82,7 @@ int8_t init_fft(struct fft_handle_t *handle) {
     handle -> fft_reorder = fft_reorder;
     handle -> fft_window = fft_window;
     // handle -> fft_setup = fft_setup;
-    handle -> run_fft = run_fft_linear_cb; 
+    handle -> run_fft = run_fft_cb; 
     handle -> run_fft_linear = run_fft_linear_cb;
     handle -> fft_mag = fft_mag_cb;
     handle -> fft_mag_db = fft_mag_db_cb;
