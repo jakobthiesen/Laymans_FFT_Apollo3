@@ -32,9 +32,9 @@ it does however save a lot of RAM.
 //Different FFT and sampling parameters are defined here.
 //Should you wish for a larger FFT such as 8192, simply define FFT size to that.
 //Note that this is RADIX-2 FFT, it must be a power of 2.
-#define FFT_SIZE 512
+#define FFT_SIZE 16384
 #define SMPL_RATE 1200000 //The desired sampling frequency. for 14 bits this caps out at 1.2 MSPS.
-#define OSR_RATIO 1       //The over-sampling ratio, note that the sampling frequency is effectively reduced by this amount.
+#define OSR_RATIO 8       //The over-sampling ratio, note that the sampling frequency is effectively reduced by this amount.
 // Note: Oversampling effectively applies a low-pass filter (via averaging/decimation). 
 // This means the frequency response is slightly attenuated near the high end of the visible spectrum.
 adc_handle_t* adc_handle = adc_get_handle();    //The handle to configure and use the ADC is initialized here.
@@ -51,7 +51,7 @@ void setup() {
   Serial.begin(1000000);
   Serial.setTimeout(0.5);
 
-  adc_config(adc_handle, SMPL_RATE, FFT_SIZE, ADC_A1, OSR_1, ADC_14BIT);    //Configure the ADC, if you wish for over-sampling use can use the following:
+  adc_config(adc_handle, SMPL_RATE, FFT_SIZE, ADC_A1, OSR_8, ADC_14BIT);    //Configure the ADC, if you wish for over-sampling use can use the following:
   //OSR_1 OSR_2 OSR_4 OSR_8 OSR_16  OSR_32  OSR_64  OSR_128
 
   //you can setup for the following analog channels:
@@ -69,7 +69,7 @@ void setup() {
 
   delay(1000);//Allow the ADC core to start etc.
   init_fft(fft_handle); //Initialize the FFT library, setting up internal call-back functions etc.
-  fft_setup(fft_handle, FFT_SIZE, IMPERIAL);  //Setup the FFT for the desired sample-size and window function
+  fft_setup(fft_handle, FFT_SIZE, HIGH_IMPERIAL);  //Setup the FFT for the desired sample-size and window function
   //The following windows are available:
   //  RECTANGULAR,      - Simple, offers very bad side lobes
   //  BARTLETT,         - A bit better than Rectangular, still not very good
@@ -83,25 +83,25 @@ void setup() {
 
   pinMode(13, OUTPUT);
 
-  timer = micros();
+  // timer = micros();
   
-  //Run 100 FFTs and time them, print the resulting ffts/s
-  for(int i = 0; i < 100; i ++) {
-    smpl();
-    REQUEST_TURBO_SPOT(); // Boost the core clock to 96 MHz for the FFT calculations.
-    run_fft_w_mag_db(fft_handle, smpl_data, mag);
-    // run_fft(fft_handle, smpl_data);
-    STOP_TURBO_SPOT();
-  }
-  timer = micros()-timer;
-  float fft_s = 100/((float)timer/1000000);
-  Serial.print("100 ");
-  Serial.print(FFT_SIZE);
-  Serial.print(" point FFTs performed in ");
-  Serial.print((float)timer/1000000.0,4);
-  Serial.print(" s, Resulting in ");
-  Serial.print(fft_s);
-  Serial.println(" ffts/s");
+  // //Run 100 FFTs and time them, print the resulting ffts/s
+  // for(int i = 0; i < 100; i ++) {
+  //   smpl();
+  //   REQUEST_TURBO_SPOT(); // Boost the core clock to 96 MHz for the FFT calculations.
+  //   run_fft_w_mag_db(fft_handle, smpl_data, mag);
+  //   // run_fft(fft_handle, smpl_data);
+  //   STOP_TURBO_SPOT();
+  // }
+  // timer = micros()-timer;
+  // float fft_s = 100/((float)timer/1000000);
+  // Serial.print("100 ");
+  // Serial.print(FFT_SIZE);
+  // Serial.print(" point FFTs performed in ");
+  // Serial.print((float)timer/1000000.0,4);
+  // Serial.print(" s, Resulting in ");
+  // Serial.print(fft_s);
+  // Serial.println(" ffts/s");
 
 }
 
