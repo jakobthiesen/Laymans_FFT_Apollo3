@@ -32,9 +32,9 @@ it does however save a lot of RAM.
 //Different FFT and sampling parameters are defined here.
 //Should you wish for a larger FFT such as 8192, simply define FFT size to that.
 //Note that this is RADIX-2 FFT, it must be a power of 2.
-#define FFT_SIZE 16384
+#define FFT_SIZE 512
 #define SMPL_RATE 1200000 //The desired sampling frequency. for 14 bits this caps out at 1.2 MSPS.
-#define OSR_RATIO 8       //The over-sampling ratio, note that the sampling frequency is effectively reduced by this amount.
+#define OSR_RATIO 1       //The over-sampling ratio, note that the sampling frequency is effectively reduced by this amount.
 // Note: Oversampling effectively applies a low-pass filter (via averaging/decimation). 
 // This means the frequency response is slightly attenuated near the high end of the visible spectrum.
 adc_handle_t* adc_handle = adc_get_handle();    //The handle to configure and use the ADC is initialized here.
