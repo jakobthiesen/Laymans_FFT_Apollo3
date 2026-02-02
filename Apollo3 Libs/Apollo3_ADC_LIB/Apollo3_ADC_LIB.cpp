@@ -7,6 +7,10 @@
 #include "am_bsp.h"
 #include "Apollo3_ADC_LIB.h"
 
+// typedef enum {
+//   SINGLE_CHANNEL = 0,
+//   DUAL_CHANNEL = 1
+// }channel_num_t;
 
 typedef struct adc_handle_t {
   struct cfg{
@@ -16,6 +20,8 @@ typedef struct adc_handle_t {
     volatile bool adc_dma_error;
     bool smpl_cmplt;
     am_hal_gpio_pincfg_t hal_adc_pin;
+    am_hal_gpio_pincfg_t hal_adc_pin_2;
+    channel_num_t channel_number;
     uint32_t smpl_frq;
     float true_smpl_frq;
     osr_t osr_ratio;
@@ -23,6 +29,7 @@ typedef struct adc_handle_t {
     int32_t dma_target_addr;
     adc_resolution_bits_t adc_resolution;
     adc_pin_t input_pin;
+    adc_pin_t input_pin_2;
     int8_t (*get_timer_setting)(uint32_t, uint32_t*, uint32_t*, float*);
   }cfg;
   int8_t (*trig_adc)(void);
@@ -68,16 +75,35 @@ int8_t adc_config(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_
   handle->cfg.smpl_frq = smpl_frq;
   handle->cfg.smpl_size = smpl_size;
   handle->cfg.input_pin = pin;
+  handle->cfg.channel_number = SINGLE_CHANNEL;
   handle->cfg.osr_ratio = osr;
   handle->cfg.adc_resolution = resolution;
   } else r = -1;
   return r;
 }
 
+int8_t adc_config_dual_channel(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, adc_pin_t pin_1, adc_pin_t pin_2, osr_t osr, adc_resolution_bits_t resolution) {
+  int8_t r = 0;
+  if(handle != NULL){
+    handle->cfg.selfAddr = handle;
+    handle->cfg.smpl_frq = smpl_frq;
+    handle->cfg.smpl_size = smpl_size;
+    handle->cfg.input_pin = pin_1;
+    handle->cfg.input_pin_2 = pin_2;
+    handle->cfg.channel_number = DUAL_CHANNEL;
+    handle->cfg.osr_ratio = osr;
+    handle->cfg.adc_resolution = resolution;
+  } else r = -1;
+  return r;
+
+}
+
 int8_t adc_transfer_data(struct adc_handle_t *handle, int32_t *smpl_buffer){
   int8_t r = 0;
   if(handle != NULL) {
+    uint32_t mask = 0xFFFC0;
     for(uint32_t i = 0; i < handle->cfg.smpl_size; i++) {
+      smpl_buffer[i] = smpl_buffer[i] & mask;
       smpl_buffer[i] >>= 6;
     }
   } else r = -1;
@@ -160,6 +186,16 @@ int8_t adc_cfg(struct adc_handle_t *handle, int32_t *smpl_buffer) {
     adc_slot_cfg.bEnabled = 1;
 
     am_hal_adc_configure_slot(handle->cfg.hal_handle, 0, &adc_slot_cfg);
+
+    if(handle -> cfg.channel_number == DUAL_CHANNEL) {
+      adc_slot_cfg.eMeasToAvg = (am_hal_adc_meas_avg_e)(handle -> cfg.osr_ratio);
+      adc_slot_cfg.ePrecisionMode = (am_hal_adc_slot_prec_e)(handle -> cfg.adc_resolution);
+      adc_slot_cfg.eChannel = (am_hal_adc_slot_chan_e)(handle -> cfg.input_pin_2);
+      adc_slot_cfg.bWindowCompare = 0;
+      adc_slot_cfg.bEnabled = 1;
+
+      am_hal_adc_configure_slot(handle->cfg.hal_handle, 1, &adc_slot_cfg);
+    }
 
     adc_cfg_dma(handle, smpl_buffer);
     am_hal_adc_interrupt_enable(handle->cfg.hal_handle, AM_HAL_ADC_INT_DERR | AM_HAL_ADC_INT_DCMP);
@@ -255,15 +291,26 @@ int8_t adc_setup(struct adc_handle_t *handle, int32_t *smpl_buffer){
   int8_t r = 0;
   if(handle != NULL) {
     uint32_t pin_cfg;
+    uint32_t pin_2_cfg;
     uint32_t pad_cfg;
+    uint32_t pad_2_cfg;
     get_artemis_adc_pin(handle->cfg.input_pin, &pin_cfg, &pad_cfg);
     handle->cfg.hal_adc_pin = {.uFuncSel = pin_cfg,};
+
+    if(handle->cfg.channel_number == DUAL_CHANNEL){
+      get_artemis_adc_pin(handle->cfg.input_pin_2, &pin_2_cfg, &pad_2_cfg);
+      handle->cfg.hal_adc_pin_2 = {.uFuncSel = pin_2_cfg,};
+    }
     
+
     am_bsp_itm_printf_enable();
     init_timer_A3_adc(handle);
     NVIC_EnableIRQ(ADC_IRQn);
     am_hal_interrupt_master_enable();
     am_hal_gpio_pinconfig(pad_cfg, handle->cfg.hal_adc_pin);
+    if(handle->cfg.channel_number == DUAL_CHANNEL){
+      am_hal_gpio_pinconfig(pad_2_cfg, handle->cfg.hal_adc_pin_2);
+    }
 
     adc_cfg(handle, smpl_buffer);
 

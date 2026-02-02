@@ -5,7 +5,7 @@
 
 
 
-#define FFT_SIZE 8192
+#define FFT_SIZE 1024
 // #define LUT_SIZE 512
 
 
@@ -43,7 +43,7 @@ void setup() {
   Serial.begin(500000);
   Serial.setTimeout(1);
 
-  adc_config(adc_handle, 1200000, FFT_SIZE, ADC_A1, OSR_4, ADC_14BIT);
+  adc_config(adc_handle, 100000, FFT_SIZE, ADC_A1, OSR_1, ADC_14BIT);
   adc_setup(adc_handle, smpl_data);
   delay(1000);
 
@@ -59,7 +59,7 @@ void setup() {
 
 
   init_fft(fft_handle);  
-  fft_setup(fft_handle, FFT_SIZE, BLACKMAN_HARRIS);
+  fft_setup(fft_handle, FFT_SIZE, RECTANGULAR);
 
 
   // fft_handle.fft_setup(&fft_handle, FFT_SIZE,);
@@ -72,19 +72,38 @@ void setup() {
 void loop() {
   // put your main code here, to run repeatedly:
 
+  // For FFT plotting with python tool
+  // recvWithEndMarker();
+  // if(CheckData('H')) {
+  //   Serial.println(FFT_SIZE/2);
+  //   smpl();
+  //   run_fft_w_mag_db(fft_handle, smpl_data, mag);    
+  //   // fft_handle.full_fft_w_mag(&fft_handle, smpl_data, sin_LUT, mag, HANN,0);
 
-  recvWithEndMarker();
-  if(CheckData('H')) {
-    Serial.println(FFT_SIZE/2);
-    smpl();
-    run_fft_w_mag_db(fft_handle, smpl_data, mag);    
-    // fft_handle.full_fft_w_mag(&fft_handle, smpl_data, sin_LUT, mag, HANN,0);
 
+  //   TXSmpl(mag, FFT_SIZE, (400.0));
 
-    TXSmpl(mag, FFT_SIZE, (400.0));
+  // }
+
+  //For simple TX Transfer
+  smpl();
+  // run_fft_w_mag_db(fft_handle, smpl_data, mag);  
+  run_fft(fft_handle, smpl_data);
+  run_ifft(fft_handle, smpl_data);
+  // get_mag_db(fft_handle, smpl_data, mag);
+  for(uint16_t i = 0; i < (uint16_t)(FFT_SIZE/2); i++){
+    // float re = (float)((int16_t)(smpl_data[i]&0x0000FFFF));
+    // float im = (float)((int16_t)(smpl_data[i]>>16));
+    Serial.print("real:");
+    Serial.print((int16_t)(smpl_data[i]&0x0000FFFF));
+    Serial.print(",");
+    Serial.print("Imag:");
+    Serial.println((int16_t)(smpl_data[i]>>16));
+
+    // Serial.println(mag[i]);
 
   }
-
+  delay(2000);
 
 
 }

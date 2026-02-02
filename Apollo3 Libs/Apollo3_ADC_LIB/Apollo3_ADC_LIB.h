@@ -35,6 +35,12 @@ typedef enum {
   ADC_14BIT = AM_HAL_ADC_SLOT_14BIT
 }adc_resolution_bits_t;
 
+typedef enum {
+  SINGLE_CHANNEL = 0,
+  DUAL_CHANNEL = 1
+}channel_num_t;
+
+
 typedef struct adc_handle_t adc_handle_t;
 
 adc_handle_t* adc_get_handle(void);
@@ -42,6 +48,7 @@ int8_t adc_setup(struct adc_handle_t *handle, int32_t *smpl_buffer);
 int8_t adc_software_trigger(struct adc_handle_t *handle, int32_t *smpl_buffer);
 int8_t adc_smpl_status(struct adc_handle_t *handle);
 int8_t adc_config(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, adc_pin_t pin, osr_t osr, adc_resolution_bits_t resolution);
+int8_t adc_config_dual_channel(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, adc_pin_t pin_1, adc_pin_t pin_2, osr_t osr, adc_resolution_bits_t resolution);
 int8_t adc_clear_status(struct adc_handle_t *handle);
 int8_t adc_transfer_data(struct adc_handle_t *handle, int32_t *smpl_buffer);
 int8_t adc_get_true_smpl_frq(struct adc_handle_t *handle, float *true_smpl_frq);

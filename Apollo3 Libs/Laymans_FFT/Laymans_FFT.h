@@ -27,6 +27,7 @@ fft_handle_t* fft_get_handle(void);
 int8_t init_fft( fft_handle_t *handle);
 int8_t fft_setup( fft_handle_t *handle, uint16_t smpl_size, windows_t window_type);
 int8_t run_fft( fft_handle_t *handle, int32_t *smpl_data);
+int8_t run_ifft( fft_handle_t *handle, int32_t *fft_data);
 int8_t get_mag_db( fft_handle_t *handle, int32_t *fft_data, float *mag_data);
 int8_t run_fft_w_mag_db( fft_handle_t *handle, int32_t *smpl_data, float *mag_data);
 // void BARTLETT_WIN(int32_t *data, uint16_t N);

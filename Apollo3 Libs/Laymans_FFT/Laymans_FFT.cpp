@@ -26,8 +26,9 @@ typedef struct fft_handle_t {
     float window_gain_correction;
   }cfg;
   // int8_t (*fft_setup)(struct fft_handle_t*, uint16_t);
-  int8_t (*run_fft)(struct fft_handle_t*, int32_t*, int16_t*);
-  int8_t (*run_fft_linear)(struct fft_handle_t*, int32_t*, int16_t*);
+  int8_t (*run_fft)(struct fft_handle_t*, int32_t*, int16_t*, windows_t);
+  int8_t (*run_ifft)(struct fft_handle_t*, int32_t*, int16_t*, windows_t);
+  int8_t (*run_fft_linear)(struct fft_handle_t*, int32_t*, int16_t*, windows_t);
   int8_t (*fft_mag)(struct fft_handle_t*, int32_t*);
   int8_t (*fft_mag_db)(struct fft_handle_t*, int32_t*, float*);
   int8_t (*full_fft_w_mag)(struct fft_handle_t*, int32_t *, int16_t*, float*, windows_t, bool);
@@ -45,8 +46,9 @@ int8_t get_twiddle_linear(struct fft_handle_t *handle, uint16_t index, int16_t *
 uint16_t bit_reverse(uint8_t l, uint16_t x);
 int8_t fft_reorder(struct fft_handle_t *handle, int32_t *data);
 int8_t fft_window(struct fft_handle_t *handle, int32_t *data, windows_t W);
-int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT);
-int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT);
+int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W);
+int8_t run_ifft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W);
+int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W);
 int8_t fft_mag_cb(struct fft_handle_t *handle, int32_t *data);
 int8_t fft_mag_db_cb(struct fft_handle_t *handle, int32_t *data_i, float *data_o);
 int8_t full_fft_w_mag_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, float *data_o, windows_t W, bool Linear);
@@ -83,6 +85,7 @@ int8_t init_fft(struct fft_handle_t *handle) {
     handle -> fft_window = fft_window;
     // handle -> fft_setup = fft_setup;
     handle -> run_fft = run_fft_cb; 
+    handle -> run_ifft = run_ifft_cb;
     handle -> run_fft_linear = run_fft_linear_cb;
     handle -> fft_mag = fft_mag_cb;
     handle -> fft_mag_db = fft_mag_db_cb;
@@ -115,7 +118,17 @@ int8_t fft_setup(struct fft_handle_t *handle, uint16_t smpl_size, windows_t wind
 int8_t run_fft(struct fft_handle_t *handle, int32_t *smpl_data) {
   int8_t r = 0;
   if(handle != NULL) {
-    handle->run_fft(handle, smpl_data, tw_lut);
+    windows_t win = handle->cfg.win;
+    handle->run_fft(handle, smpl_data, tw_lut, win);
+  } else r = -1;
+  return r;
+}
+
+int8_t run_ifft(struct fft_handle_t *handle, int32_t *fft_data) {
+  int8_t r = 0;
+  if(handle != NULL){
+    windows_t win = handle->cfg.win;
+    handle->run_ifft(handle, fft_data, tw_lut, win);
   } else r = -1;
   return r;
 }
@@ -524,10 +537,11 @@ void blackman_harris_win(int32_t *data, uint16_t N, float m_pi) {
 }
 
 
-int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT) {
+int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W) {
   int8_t r = 0;
-  
   if(handle != NULL) {
+    handle -> fft_window(handle, data, W);
+    handle -> fft_reorder(handle, data);
     int16_t ja = 0;
     int16_t jb = 0;
     uint16_t TwAddr = 0;
@@ -565,7 +579,7 @@ int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT) {
         TwAddr = (((~mask_b)>>i) & mask_b) & j;
 
         handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
-        // tw_apx = LUT[TwAddr];
+        // tw_apx = LUT[TwAddr];c:\Users\TK32FF\Desktop\Laymans_FFT_Apollo3\Apollo3 Libs\Apollo3_ADC_LIB\Apollo3_ADC_LIB.h
 
         x = data[jb];
 
@@ -605,11 +619,101 @@ int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT) {
   return r;
 }
 
-
-int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT) {
+int8_t run_ifft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W) {
   int8_t r = 0;
   
   if(handle != NULL) {
+    // handle -> fft_window(handle, data, W);
+    handle -> fft_reorder(handle, data);
+    int16_t ja = 0;
+    int16_t jb = 0;
+    uint16_t TwAddr = 0;
+    uint16_t mask = 0;
+
+    int32_t buf_r = 0;
+    int32_t buf_i = 0;
+    int32_t a_val = 0;
+    int32_t b_val = 0;
+    int16_t ar = 0;
+    int16_t ai = 0;
+
+    int32_t x = 0;
+    int32_t tw_apx = 0;
+
+    int16_t out_r_ja = 0;
+    int16_t out_i_ja = 0;
+
+    int16_t out_r_jb = 0;
+    int16_t out_i_jb = 0;
+
+    uint8_t level = handle -> cfg.fft_level;
+    uint16_t N = handle -> cfg.smpl_size;
+
+    uint16_t mask_a = handle -> cfg.mask_a;
+    uint16_t mask_b = handle -> cfg.mask_b;
+
+    for(uint8_t i = 0; i<level; i++) {
+      for(uint16_t j = 0; j < (N/2); j++) {
+        ja = j<<1;
+        jb = ja+1;
+
+        ja = ((ja<<i)|(ja>>(level-i))) & mask_a;
+        jb = ((jb<<i)|(jb>>(level-i))) & mask_a;
+        TwAddr = (((~mask_b)>>i) & mask_b) & j;
+
+        handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
+        // tw_apx = LUT[TwAddr];c:\Users\TK32FF\Desktop\Laymans_FFT_Apollo3\Apollo3 Libs\Apollo3_ADC_LIB\Apollo3_ADC_LIB.h
+        buf_r = ((int16_t)(tw_apx & 0x0000FFFF));
+        buf_i = ((int16_t)(tw_apx >> 16));
+        buf_i = buf_i*(-1);
+        tw_apx = __PKHBT((int16_t)buf_r, (int16_t)buf_i, 16);
+        x = data[jb];
+
+        buf_r = (__SMUSD(x, tw_apx));
+        buf_i = (__SMUADX(x, tw_apx));
+
+        buf_r >>=15;
+        buf_i >>=15;
+
+        buf_r = __SSAT(buf_r, 16);
+        buf_i = __SSAT(buf_i, 16);
+
+        a_val = data[ja];
+        b_val = __PKHBT(buf_r, buf_i, 16);
+        
+        // data[jb] = __SHSUB16(data[ja], b_val);
+        // data[ja] = __SHADD16(data[ja], b_val);
+
+        data[jb] = __QSUB16(data[ja], b_val);  // subtract without shift, saturates
+        data[ja] = __QADD16(data[ja], b_val);  // add without shift, saturates
+
+        // ar = (int16_t)(a_val&0x0000FFFF);
+        // ai = (int16_t)(a_val>>16);
+
+        // out_r_jb = __SSAT(((int32_t)ar - buf_r)>>1, 16);
+        // out_i_jb = __SSAT(((int32_t)ai - buf_i)>>1, 16);
+
+        // out_r_ja = __SSAT(((int32_t)ar + buf_r)>>1, 16);
+        // out_i_ja = __SSAT(((int32_t)ai + buf_i)>>1, 16);
+
+        // data[jb] = __PKHBT(out_r_jb, out_i_jb, 16);
+        // data[ja] = __PKHBT(out_r_ja, out_i_ja, 16);
+
+
+      }
+    }
+ 
+  } else r = -1;
+  return r;
+}
+
+
+int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W) {
+  int8_t r = 0;
+  
+  if(handle != NULL) {
+    handle -> fft_window(handle, data, W);
+    handle -> fft_reorder(handle, data);
     int16_t ja = 0;
     int16_t jb = 0;
     uint16_t TwAddr = 0;
@@ -686,12 +790,12 @@ int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LU
 int8_t full_fft_w_mag_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, float *data_o, windows_t W, bool Linear) {
   int8_t r = 0;
   if(handle != NULL) {
-    handle -> fft_window(handle, data, W);
-    handle -> fft_reorder(handle, data);
+    // handle -> fft_window(handle, data, W);
+    // handle -> fft_reorder(handle, data);
     if(Linear == 0) {
-      handle -> run_fft(handle, data, tw_lut);
+      handle -> run_fft(handle, data, tw_lut, W);
     }
-    else handle -> run_fft_linear(handle, data, tw_lut);
+    else handle -> run_fft_linear(handle, data, tw_lut, W);
     handle -> fft_mag_db(handle, data, data_o);
   } else r = -1;
   return r;
