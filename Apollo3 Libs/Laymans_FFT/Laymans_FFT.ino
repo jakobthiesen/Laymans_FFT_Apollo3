@@ -5,7 +5,7 @@
 
 
 
-#define FFT_SIZE 1024
+#define FFT_SIZE 512
 // #define LUT_SIZE 512
 
 
@@ -19,6 +19,7 @@ adc_handle_t* adc_handle = adc_get_handle();
 
 int32_t w_ri = 0;
 int32_t smpl_data[FFT_SIZE];
+int32_t smpl_data_temp[FFT_SIZE];
 float mag[FFT_SIZE];
 
 unsigned long timer = 0;
@@ -43,10 +44,15 @@ void setup() {
   Serial.begin(500000);
   Serial.setTimeout(1);
 
-  adc_config(adc_handle, 100000, FFT_SIZE, ADC_A1, OSR_1, ADC_14BIT);
+  init_fft(fft_handle);  
+  fft_setup(fft_handle, FFT_SIZE, HAMMING);
+
+  adc_config(adc_handle, 100000, FFT_SIZE, BURST_SCAN, ADC_A1, OSR_1, ADC_14BIT);
   adc_setup(adc_handle, smpl_data);
+  adc_arm_burst_scan(adc_handle, smpl_data);
   delay(1000);
 
+  adc_software_burst_trigger(adc_handle, smpl_data);
   while(1){
     if(adc_smpl_status(adc_handle) == 1) {
       break;
@@ -55,17 +61,31 @@ void setup() {
   }
   adc_transfer_data(adc_handle, smpl_data);
   adc_clear_status(adc_handle);
+  adc_arm_burst_scan(adc_handle, smpl_data);
+  
+  adc_software_burst_trigger(adc_handle, smpl_data);
+  while(1){
+    if(adc_smpl_status(adc_handle) == 1) {
+      break;
+    }
+    delay(10);
+  }
+  adc_transfer_data(adc_handle, smpl_data);
+  adc_clear_status(adc_handle);
+  adc_arm_burst_scan(adc_handle, smpl_data);
 
 
 
-  init_fft(fft_handle);  
-  fft_setup(fft_handle, FFT_SIZE, RECTANGULAR);
 
+  run_fft_w_mag_db(fft_handle, smpl_data, mag); 
 
-  // fft_handle.fft_setup(&fft_handle, FFT_SIZE,);
-  // fft_setup(&fft_handle, FFT_SIZE, RECTANGULAR);
-
-  smpl();
+  // window(fft_handle, smpl_data, BLACKMAN_HARRIS);
+  uint16_t k = (uint16_t)(FFT_SIZE/2);
+  for(uint16_t i = 0; i < k; i++) {
+    Serial.println(mag[i]);
+    // Serial.println(smpl_data[i]);
+    delay(5);
+  }
 
 }
 
@@ -86,25 +106,34 @@ void loop() {
   // }
 
   //For simple TX Transfer
-  smpl();
-  // run_fft_w_mag_db(fft_handle, smpl_data, mag);  
-  run_fft(fft_handle, smpl_data);
-  run_ifft(fft_handle, smpl_data);
-  // get_mag_db(fft_handle, smpl_data, mag);
-  for(uint16_t i = 0; i < (uint16_t)(FFT_SIZE/2); i++){
-    // float re = (float)((int16_t)(smpl_data[i]&0x0000FFFF));
-    // float im = (float)((int16_t)(smpl_data[i]>>16));
-    Serial.print("real:");
-    Serial.print((int16_t)(smpl_data[i]&0x0000FFFF));
-    Serial.print(",");
-    Serial.print("Imag:");
-    Serial.println((int16_t)(smpl_data[i]>>16));
+  // smpl();
+  // for(int i = 0; i < FFT_SIZE; i++){
+  //   smpl_data_temp[i] = smpl_data[i];
+  // }
+  // // run_fft_w_mag_db(fft_handle, smpl_data, mag);  
+  // run_fft(fft_handle, smpl_data);
+  // for(int i = 0; i < 50; i++){
+  //   smpl_data[i] = 0;
+  // }
+  // run_ifft(fft_handle, smpl_data);
+  // // get_mag_db(fft_handle, smpl_data, mag);
+  
+  // for(uint16_t i = 0; i < (uint16_t)(FFT_SIZE/2); i++){
+  //   // float re = (float)((int16_t)(smpl_data[i]&0x0000FFFF));
+  //   // float im = (float)((int16_t)(smpl_data[i]>>16));
+  //   Serial.print("real:");
+  //   Serial.print((int16_t)(smpl_data[i]&0x0000FFFF));
+  //   Serial.print(",");
+  //   Serial.print("Imag:");
+  //   Serial.print((int16_t)(smpl_data[i]>>16));
+  //   Serial.print(",");
+  //   Serial.print("Original data:");
+  //   Serial.println(smpl_data_temp[i]);
 
-    // Serial.println(mag[i]);
+  //   // Serial.println(mag[i]);
 
-  }
+  // }
   delay(2000);
-
 
 }
 
@@ -142,7 +171,7 @@ void TXSmpl(float *data, uint16_t smpl_size, float fs) {
 
 void smpl() {
 
-  adc_software_trigger(adc_handle, smpl_data);
+  adc_software_burst_trigger(adc_handle, smpl_data);
   while(1) {
     if(adc_smpl_status(adc_handle) == 1) {
       break;

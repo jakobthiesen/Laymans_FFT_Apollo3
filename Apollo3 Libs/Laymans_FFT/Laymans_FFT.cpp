@@ -34,6 +34,7 @@ typedef struct fft_handle_t {
   int8_t (*full_fft_w_mag)(struct fft_handle_t*, int32_t *, int16_t*, float*, windows_t, bool);
   int8_t (*fft_reorder)(struct fft_handle_t*, int32_t*);
   int8_t (*fft_window)(struct fft_handle_t*, int32_t*, windows_t);
+  int8_t (*hilbert_transform)(struct fft_handle_t*, int32_t*);
 }fft_handle_t;
 
 
@@ -52,6 +53,7 @@ int8_t run_fft_linear_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LU
 int8_t fft_mag_cb(struct fft_handle_t *handle, int32_t *data);
 int8_t fft_mag_db_cb(struct fft_handle_t *handle, int32_t *data_i, float *data_o);
 int8_t full_fft_w_mag_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, float *data_o, windows_t W, bool Linear);
+int8_t hilbert_transform_cb(struct fft_handle_t *handle, int32_t *data);
 void bartlett_win(int32_t *data, uint16_t N);
 void hamming_win(int32_t *data, uint16_t N, float m_pi);
 void hann_win(int32_t *data, uint16_t N, float m_pi);
@@ -90,6 +92,7 @@ int8_t init_fft(struct fft_handle_t *handle) {
     handle -> fft_mag = fft_mag_cb;
     handle -> fft_mag_db = fft_mag_db_cb;
     handle -> full_fft_w_mag = full_fft_w_mag_cb;
+    handle -> hilbert_transform = hilbert_transform_cb;
   } else r = -1;
   return r;
 }
@@ -114,6 +117,14 @@ int8_t fft_setup(struct fft_handle_t *handle, uint16_t smpl_size, windows_t wind
     } else r = -1;
   return r;
 } 
+
+int8_t hilbert_transform(struct fft_handle_t *handle, int32_t *data){
+  int8_t r = 0;
+  if(handle != NULL) {
+    handle->hilbert_transform(handle, data);
+  } else r = -1;
+  return r;
+}
 
 int8_t run_fft(struct fft_handle_t *handle, int32_t *smpl_data) {
   int8_t r = 0;
@@ -332,6 +343,14 @@ int8_t fft_reorder(struct fft_handle_t *handle, int32_t*data) {
         data[rev_idx] = buf; 
       }
     }
+  } else r = -1;
+  return r;
+}
+
+int8_t window(struct fft_handle_t *handle, int32_t *data, windows_t W) {
+  int8_t r = 0;
+  if(handle != NULL) {
+    handle->fft_window(handle, data, W);
   } else r = -1;
   return r;
 }
@@ -841,3 +860,24 @@ int8_t fft_mag_db_cb(struct fft_handle_t *handle, int32_t *data_i, float *data_o
   return r;
 }
 
+int8_t hilbert_transform_cb(struct fft_handle_t *handle, int32_t *data){
+  int8_t r = 0;
+  if(handle != NULL) {
+    uint16_t size = handle->cfg.smpl_size;
+    uint16_t half_size = (uint16_t)(size/2);
+
+    int16_t re = 0;
+    int16_t im = 0;
+    for(uint16_t i = 1; i < size; i++) {
+      if(i < half_size) {
+        re = (int16_t)((data[i]&0x0000FFFF)*2);
+        im = (int16_t)(((data[i]>>16)&0x0000FFFF)*2);
+        data[i] = __PKHBT(re, im, 16);
+      }
+      if(i > half_size) {
+        data[i] = 0;
+      }
+    }
+  } else r = -1;
+  return r;
+}

@@ -18,6 +18,7 @@ typedef struct adc_handle_t {
     void *hal_handle;
     volatile bool adc_dma_cmplt;
     volatile bool adc_dma_error;
+    scan_mode_t scanmode;
     bool smpl_cmplt;
     am_hal_gpio_pincfg_t hal_adc_pin;
     am_hal_gpio_pincfg_t hal_adc_pin_2;
@@ -46,21 +47,18 @@ void get_artemis_adc_pin(adc_pin_t pin, uint32_t *uFunc_pin, uint32_t *pad_sel);
 
 static adc_handle_t adc_handler;
 
-
-
 adc_handle_t* adc_get_handle(void){
   return &adc_handler;
 }
-
-
-
-
 
 extern "C" void am_adc_isr() {
   uint32_t ui32intMask;
   am_hal_adc_interrupt_status(adc_handler.cfg.hal_handle, &ui32intMask, 0);
   am_hal_adc_interrupt_clear(adc_handler.cfg.hal_handle, ui32intMask);
   if(ui32intMask & AM_HAL_ADC_INT_DCMP) {
+    if(adc_handler.cfg.scanmode == BURST_SCAN) {
+      am_hal_adc_disable(adc_handler.cfg.hal_handle);
+    }
     adc_handler.cfg.adc_dma_cmplt = 1;
   }
   if(ui32intMask & AM_HAL_ADC_INT_DERR) {
@@ -68,9 +66,10 @@ extern "C" void am_adc_isr() {
   }
 }
 
-int8_t adc_config(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, adc_pin_t pin, osr_t osr, adc_resolution_bits_t resolution) {
+int8_t adc_config(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, scan_mode_t scanmode, adc_pin_t pin, osr_t osr, adc_resolution_bits_t resolution) {
   int8_t r = 0;
   if(handle != NULL) {
+  handle->cfg.scanmode = scanmode;
   handle->cfg.selfAddr = handle;
   handle->cfg.smpl_frq = smpl_frq;
   handle->cfg.smpl_size = smpl_size;
@@ -82,9 +81,10 @@ int8_t adc_config(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_
   return r;
 }
 
-int8_t adc_config_dual_channel(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, adc_pin_t pin_1, adc_pin_t pin_2, osr_t osr, adc_resolution_bits_t resolution) {
+int8_t adc_config_dual_channel(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_t smpl_size, scan_mode_t scanmode, adc_pin_t pin_1, adc_pin_t pin_2, osr_t osr, adc_resolution_bits_t resolution) {
   int8_t r = 0;
   if(handle != NULL){
+    handle->cfg.scanmode = scanmode;
     handle->cfg.selfAddr = handle;
     handle->cfg.smpl_frq = smpl_frq;
     handle->cfg.smpl_size = smpl_size;
@@ -106,6 +106,38 @@ int8_t adc_transfer_data(struct adc_handle_t *handle, int32_t *smpl_buffer){
       smpl_buffer[i] = smpl_buffer[i] & mask;
       smpl_buffer[i] >>= 6;
     }
+  } else r = -1;
+  return r;
+}
+
+int8_t adc_arm_burst_scan(struct adc_handle_t *handle, int32_t *smpl_buffer) {
+  int8_t r = 0;
+  if(handle != NULL) {
+    if(handle->cfg.scanmode == BURST_SCAN) {
+      am_hal_adc_slot_config_t adc_slot_cfg;
+
+      adc_slot_cfg.eMeasToAvg = (am_hal_adc_meas_avg_e)(handle -> cfg.osr_ratio);
+      adc_slot_cfg.ePrecisionMode = (am_hal_adc_slot_prec_e)(handle -> cfg.adc_resolution);
+      adc_slot_cfg.eChannel = (am_hal_adc_slot_chan_e)(handle -> cfg.input_pin);
+      adc_slot_cfg.bWindowCompare = 0;
+      adc_slot_cfg.bEnabled = 1;
+
+      am_hal_adc_configure_slot(handle->cfg.hal_handle, 0, &adc_slot_cfg);
+
+      if(handle -> cfg.channel_number == DUAL_CHANNEL) {
+        adc_slot_cfg.eMeasToAvg = (am_hal_adc_meas_avg_e)(handle -> cfg.osr_ratio);
+        adc_slot_cfg.ePrecisionMode = (am_hal_adc_slot_prec_e)(handle -> cfg.adc_resolution);
+        adc_slot_cfg.eChannel = (am_hal_adc_slot_chan_e)(handle -> cfg.input_pin_2);
+        adc_slot_cfg.bWindowCompare = 0;
+        adc_slot_cfg.bEnabled = 1;
+
+        am_hal_adc_configure_slot(handle->cfg.hal_handle, 1, &adc_slot_cfg);
+      }
+
+      adc_cfg_dma(handle, smpl_buffer);
+      am_hal_adc_interrupt_enable(handle->cfg.hal_handle, AM_HAL_ADC_INT_DERR | AM_HAL_ADC_INT_DCMP);
+      am_hal_adc_enable(handle->cfg.hal_handle); 
+    } else r = -2;
   } else r = -1;
   return r;
 }
@@ -158,7 +190,11 @@ int8_t adc_cfg_dma(struct adc_handle_t *handle, int32_t *smpl_buffer){
   } else r = -1;
   return r;
 }
-
+// NOTE:
+// REPEATING_SCAN is intentionally used even for BURST_SCAN mode.
+// This allows the ADC to free-run and fill a DMA buffer with N samples
+// from a single software trigger. The ADC is explicitly disabled in the
+// DCMP ISR to enforce a finite burst and deterministic buffer layout.
 int8_t adc_cfg(struct adc_handle_t *handle, int32_t *smpl_buffer) {
   int8_t r = 0;
   if(handle != NULL) {
@@ -196,10 +232,13 @@ int8_t adc_cfg(struct adc_handle_t *handle, int32_t *smpl_buffer) {
 
       am_hal_adc_configure_slot(handle->cfg.hal_handle, 1, &adc_slot_cfg);
     }
-
     adc_cfg_dma(handle, smpl_buffer);
     am_hal_adc_interrupt_enable(handle->cfg.hal_handle, AM_HAL_ADC_INT_DERR | AM_HAL_ADC_INT_DCMP);
-    am_hal_adc_enable(handle->cfg.hal_handle);    
+
+    if(handle->cfg.scanmode == FREE_RUNNING) {
+      am_hal_adc_enable(handle->cfg.hal_handle); 
+    }
+       
   } else r = -1;
   return r;
 }
@@ -222,6 +261,9 @@ int8_t get_timer_setting(struct adc_handle_t *handle, uint32_t smpl_frq, uint32_
       case(ADC_14BIT):
         max_frq = 1200000;
         break;
+    }
+    if(handle->cfg.channel_number == DUAL_CHANNEL) {
+      max_frq = uint32_t(max_frq/2);
     }
     if(smpl_frq > max_frq) {
       smpl_frq = max_frq;
@@ -290,28 +332,26 @@ void get_artemis_adc_pin(adc_pin_t pin, uint32_t *uFunc_pin, uint32_t *pad_sel) 
 int8_t adc_setup(struct adc_handle_t *handle, int32_t *smpl_buffer){
   int8_t r = 0;
   if(handle != NULL) {
+    channel_num_t synchronous = handle->cfg.channel_number;
     uint32_t pin_cfg;
-    uint32_t pin_2_cfg;
     uint32_t pad_cfg;
-    uint32_t pad_2_cfg;
-    get_artemis_adc_pin(handle->cfg.input_pin, &pin_cfg, &pad_cfg);
-    handle->cfg.hal_adc_pin = {.uFuncSel = pin_cfg,};
-
-    if(handle->cfg.channel_number == DUAL_CHANNEL){
-      get_artemis_adc_pin(handle->cfg.input_pin_2, &pin_2_cfg, &pad_2_cfg);
-      handle->cfg.hal_adc_pin_2 = {.uFuncSel = pin_2_cfg,};
-    }
-    
 
     am_bsp_itm_printf_enable();
     init_timer_A3_adc(handle);
     NVIC_EnableIRQ(ADC_IRQn);
     am_hal_interrupt_master_enable();
+
+    get_artemis_adc_pin(handle->cfg.input_pin, &pin_cfg, &pad_cfg);
+    handle->cfg.hal_adc_pin = {.uFuncSel = pin_cfg,};
     am_hal_gpio_pinconfig(pad_cfg, handle->cfg.hal_adc_pin);
-    if(handle->cfg.channel_number == DUAL_CHANNEL){
+    if(synchronous == DUAL_CHANNEL){
+      uint32_t pin_2_cfg;
+      uint32_t pad_2_cfg;
+      get_artemis_adc_pin(handle->cfg.input_pin_2, &pin_2_cfg, &pad_2_cfg);
+      handle->cfg.hal_adc_pin_2 = {.uFuncSel = pin_2_cfg,};
       am_hal_gpio_pinconfig(pad_2_cfg, handle->cfg.hal_adc_pin_2);
     }
-
+   
     adc_cfg(handle, smpl_buffer);
 
     am_hal_adc_sw_trigger(handle->cfg.hal_handle);
@@ -322,7 +362,8 @@ int8_t adc_setup(struct adc_handle_t *handle, int32_t *smpl_buffer){
   return r;
 }
 
-int8_t adc_software_trigger(struct adc_handle_t *handle, int32_t *smpl_buffer){
+
+int8_t adc_software_free_running_trigger(struct adc_handle_t *handle, int32_t *smpl_buffer){
   int8_t r = 0;
   if(handle != NULL) {
     handle -> cfg.smpl_cmplt = 0;
@@ -336,7 +377,20 @@ int8_t adc_software_trigger(struct adc_handle_t *handle, int32_t *smpl_buffer){
   return r;
 }
 
+int8_t adc_software_burst_trigger(struct adc_handle_t *handle, int32_t *smpl_buffer){
+  int8_t r = 0;
+  if(handle != NULL) {
+    handle -> cfg.smpl_cmplt = 0;
+    handle -> cfg.adc_dma_cmplt = 0;
 
+    adc_cfg_dma(handle, smpl_buffer);
+
+    am_hal_adc_interrupt_clear(handle->cfg.hal_handle, 0XFFFFFFFF);
+    am_hal_adc_enable(handle->cfg.hal_handle); 
+    am_hal_adc_sw_trigger(handle->cfg.hal_handle);
+  } else r = -1;
+  return r;
+}
 
 
 
