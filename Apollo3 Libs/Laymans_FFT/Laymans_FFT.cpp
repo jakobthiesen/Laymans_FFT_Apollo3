@@ -126,19 +126,17 @@ int8_t hilbert_transform(struct fft_handle_t *handle, int32_t *data){
   return r;
 }
 
-int8_t run_fft(struct fft_handle_t *handle, int32_t *smpl_data) {
+int8_t run_fft(struct fft_handle_t *handle, int32_t *smpl_data, windows_t win) {
   int8_t r = 0;
   if(handle != NULL) {
-    windows_t win = handle->cfg.win;
     handle->run_fft(handle, smpl_data, tw_lut, win);
   } else r = -1;
   return r;
 }
 
-int8_t run_ifft(struct fft_handle_t *handle, int32_t *fft_data) {
+int8_t run_ifft(struct fft_handle_t *handle, int32_t *fft_data, windows_t win) {
   int8_t r = 0;
   if(handle != NULL){
-    windows_t win = handle->cfg.win;
     handle->run_ifft(handle, fft_data, tw_lut, win);
   } else r = -1;
   return r;
@@ -559,7 +557,7 @@ void blackman_harris_win(int32_t *data, uint16_t N, float m_pi) {
 int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, windows_t W) {
   int8_t r = 0;
   if(handle != NULL) {
-    handle -> fft_window(handle, data, W);
+    // handle -> fft_window(handle, data, W);
     handle -> fft_reorder(handle, data);
     int16_t ja = 0;
     int16_t jb = 0;
@@ -597,7 +595,8 @@ int8_t run_fft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, wind
         jb = ((jb<<i)|(jb>>(level-i))) & mask_a;
         TwAddr = (((~mask_b)>>i) & mask_b) & j;
 
-        handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
+        // handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
+        handle -> cfg.get_twiddle_linear(handle, TwAddr, LUT, &tw_apx);
         // tw_apx = LUT[TwAddr];c:\Users\TK32FF\Desktop\Laymans_FFT_Apollo3\Apollo3 Libs\Apollo3_ADC_LIB\Apollo3_ADC_LIB.h
 
         x = data[jb];
@@ -680,7 +679,8 @@ int8_t run_ifft_cb(struct fft_handle_t *handle, int32_t *data, int16_t *LUT, win
         jb = ((jb<<i)|(jb>>(level-i))) & mask_a;
         TwAddr = (((~mask_b)>>i) & mask_b) & j;
 
-        handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
+        // handle -> cfg.get_twiddle(handle, TwAddr, LUT, &tw_apx);
+        handle -> cfg.get_twiddle_linear(handle, TwAddr, LUT, &tw_apx);
         // tw_apx = LUT[TwAddr];c:\Users\TK32FF\Desktop\Laymans_FFT_Apollo3\Apollo3 Libs\Apollo3_ADC_LIB\Apollo3_ADC_LIB.h
         buf_r = ((int16_t)(tw_apx & 0x0000FFFF));
         buf_i = ((int16_t)(tw_apx >> 16));

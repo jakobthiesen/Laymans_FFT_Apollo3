@@ -4,7 +4,7 @@ import serial
 import time
 import struct
 
-arduino = serial.Serial(port='COM4',  baudrate=1000000, timeout=0.1)
+arduino = serial.Serial(port='COM5',  baudrate=1000000, timeout=0.1)
 time.sleep(2)
 arduino.reset_input_buffer()
 arduino.reset_output_buffer()
